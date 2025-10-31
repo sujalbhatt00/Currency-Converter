@@ -1,108 +1,90 @@
-const Base_URL = "https://api.exchangerate-api.com/v4/latest";
+const BASE_URL = "https://api.exchangerate-api.com/v4/latest";
+
 const dropdowns = document.querySelectorAll(".dropdown select");
-const btn = document.querySelector("button");
+const amountInput = document.querySelector(".amount input");
 const fromCurrency = document.querySelector(".from select");
 const toCurrency = document.querySelector(".to select");
+const converterBtn = document.querySelector("button");
 const msg = document.querySelector(".msg");
 
-// Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    populateDropdowns();
-    updateExchangeRate();
+// Init
+document.addEventListener("DOMContentLoaded", () => {
+  populateCurrencyDropdowns();
+  updateExchangeRate();
 });
 
-// Populate currency dropdowns
-function populateDropdowns() {
-    for(let select of dropdowns) {
-        for(let currCode in countryList) {
-            let newOption = document.createElement("option");
-            newOption.innerText = currCode;
-            newOption.value = currCode;
-            
-            // Set default selections
-            if(select.name === "from" && currCode === "USD") {
-                newOption.selected = true;
-            } else if(select.name === "to" && currCode === "INR") {
-                newOption.selected = true;
-            }
-            
-            select.append(newOption);
-        }
-        
-        // Add event listener for flag updates and rate calculation
-        select.addEventListener("change", (evt) => {
-            updateFlag(evt.target);
-            updateExchangeRate();
-        });
-    }
+// Fill dropdowns dynamically from countryList
+function populateCurrencyDropdowns() {
+  dropdowns.forEach(select => {
+    Object.keys(countryList).forEach(currency => {
+      const option = new Option(currency, currency);
+      select.append(option);
+
+      if (select.name === "from" && currency === "USD") option.selected = true;
+      if (select.name === "to" && currency === "INR") option.selected = true;
+    });
+
+    select.addEventListener("change", (e) => {
+      updateFlag(e.target);
+      updateExchangeRate();
+    });
+  });
 }
 
-// Update flag image based on selected currency
-function updateFlag(element) {
-    let currCode = element.value;
-    let countryCode = countryList[currCode];
-    let newSrc = `https://flagsapi.com/${countryCode}/flat/64.png`;
-    let img = element.parentElement.querySelector("img");
-    img.src = newSrc;
-    img.alt = `${currCode} Flag`;
+// Update flag based on selected currency
+function updateFlag(selectElement) {
+  const countryCode = countryList[selectElement.value];
+  const img = selectElement.parentElement.querySelector("img");
+  img.src = `https://flagsapi.com/${countryCode}/flat/64.png`;
+  img.alt = `${selectElement.value} Flag`;
 }
 
-// Update exchange rate automatically
+// Fetch and update exchange rate
 async function updateExchangeRate() {
-    try {
-        const amount = document.querySelector(".amount input");
-        let value = parseFloat(amount.value) || 1;
-        
-        if(value <= 0) {
-            value = 1;
-            amount.value = "1";
-        }
-        
-        // Show loading state
-        msg.classList.add('loading');
-        msg.innerText = "Loading...";
-        
-        const URL = `${Base_URL}/${fromCurrency.value}`;
-        let response = await fetch(URL);
-        
-        if(!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        let data = await response.json();
-        let rate = data.rates[toCurrency.value];
-        
-        if(!rate) {
-            throw new Error("Exchange rate not found");
-        }
-        
-        let finalValue = (rate * value).toFixed(2);
-        
-        // Format numbers with commas for better readability
-        const formattedValue = value.toLocaleString();
-        const formattedFinalValue = parseFloat(finalValue).toLocaleString();
-        
-        // Remove loading state and show result
-        msg.classList.remove('loading');
-        msg.classList.remove('error');
-        msg.innerText = `${formattedValue} ${fromCurrency.value} = ${formattedFinalValue} ${toCurrency.value}`;
-        
-    } catch(error) {
-        console.error('Error fetching exchange rate:', error);
-        msg.classList.remove('loading');
-        msg.classList.add('error');
-        msg.innerText = "Error: Unable to fetch exchange rate";
-    }
+  const amount = parseFloat(amountInput.value) || 1;
+  amountInput.value = amount;
+
+  setLoading(true);
+
+  try {
+    const response = await fetch(`${BASE_URL}/${fromCurrency.value}`);
+    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+
+    const data = await response.json();
+    const rate = data.rates[toCurrency.value];
+
+    if (!rate) throw new Error("Rate not available");
+
+    const converted = (amount * rate).toFixed(2);
+
+    msg.textContent = `${amount.toLocaleString()} ${fromCurrency.value} = ${parseFloat(converted).toLocaleString()} ${toCurrency.value}`;
+    msg.classList.remove("error");
+
+  } catch (err) {
+    console.error(err);
+    msg.textContent = "Unable to fetch exchange rate.";
+    msg.classList.add("error");
+
+  } finally {
+    setLoading(false);
+  }
 }
 
-// Handle form submission
-btn.addEventListener("click", async (evt) => {
-    evt.preventDefault();
-    await updateExchangeRate();
+// Show loading state
+function setLoading(isLoading) {
+  msg.classList.toggle("loading", isLoading);
+  msg.textContent = isLoading ? "Loading..." : msg.textContent;
+}
+
+// Convert on button click
+converterBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  updateExchangeRate();
 });
 
-// Handle amount input changes
-document.querySelector(".amount input").addEventListener("input", () => {
-    clearTimeout(window.exchangeRateTimeout);
-    window.exchangeRateTimeout = setTimeout(updateExchangeRate, 500);
+// Auto convert while typing (debounced)
+let typingTimeout;
+amountInput.addEventListener("input", () => {
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(updateExchangeRate, 400);
 });
